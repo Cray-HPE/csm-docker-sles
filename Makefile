@@ -55,6 +55,7 @@ print:
 	@printf "%-20s: %s\n" Timestamp $(TIMESTAMP)
 	@printf "%-20s: %s\n" Version $(VERSION)
 
+.PHONY: image
 image: print
 	docker buildx build \
 		${BUILD_ARGS} \
@@ -78,4 +79,28 @@ image: print
 		-t '${NAME}:${SLE_VERSION}' \
 		-t '${NAME}:${SLE_VERSION}-${VERSION}' \
 		-t '${NAME}:${SLE_VERSION}-${VERSION}-${TIMESTAMP}' \
+		.
+
+publish: image
+
+	docker buildx build \
+		${BUILD_ARGS} \
+		${DOCKER_ARGS} \
+		--cache-from type=local,src=docker-build-cache \
+		--platform linux/amd64 \
+		--push \
+		-t '${REGISTRY}/${NAME}:${SLE_VERSION}' \
+		-t '${REGISTRY}/${NAME}:${SLE_VERSION}-${VERSION}' \
+		-t '${REGISTRY}/${NAME}:${SLE_VERSION}-${VERSION}-${TIMESTAMP}' \
+		.
+
+release:
+
+	docker buildx build \
+		${BUILD_ARGS} \
+		${DOCKER_ARGS} \
+		--cache-from type=local,src=docker-build-cache \
+		--platform linux/amd64 \
+		--push \
+		-t '${REGISTRY}/${NAME}:latest' \
 		.
