@@ -58,8 +58,8 @@ pipeline {
         BUILD_ARGS = "--build-arg 'SLE_VERSION=${SLE_VERSION}' --secret id=SLES_REGISTRATION_CODE"
         DOCKER_ARGS = getDockerBuildArgs(name: getRepoName(), description: 'A build environment.')
         DOCKER_BUILDKIT = 1
-        MULTI_ARCH = 1
         NAME = getRepoName()
+        REGISTRY = "artifactory.algol60.net/csm-docker/${ isStable ? "stable" : "unstable" }"
         SLE_VERSION = sh(returnStdout: true, script: "awk -F ':' '/^FROM/{print \$NF; exit}' Dockerfile | awk '{print \$1}'").trim()
         SLES_REGISTRATION_CODE = credentials('sles15-registration-code')
         TIMESTAMP = sh(returnStdout: true, script: "date '+%Y%m%d%H%M%S'").trim()
@@ -70,7 +70,9 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh "make image"
+                withCredentials([usernamePassword(credentialsId: 'artifactory-algol60-publish', passwordVariable: 'ARTIFACTORY_PASSWORD', usernameVariable: 'ARTIFACTORY_USERNAME')]) {
+                    sh "make publish"
+                }
             }
         }
 
@@ -84,11 +86,15 @@ pipeline {
                         Publish these tags on stable:
                             - Major.Minor                   (e.g. 15.4)
                         */
-                        publishCsmDockerImage(image: env.NAME, multiArch: env.MULTI_ARCH, isStable: isStable, tag: "${env.SLE_VERSION}")
+                        publishCsmDockerImage(image: env.NAME, push: false, isStable: isStable, tag: "${env.SLE_VERSION}")
 
                         // Only publish a latest when on main, never publish a latest for any beta or maint branches.
                         if (env.BRANCH_NAME == 'main') {
-                            publishCsmDockerImage(image: env.NAME, multiArch: env.MULTI_ARCH, isStable: isStable, tag: "latest")
+                            withCredentials([usernamePassword(credentialsId: 'artifactory-algol60-publish', passwordVariable: 'ARTIFACTORY_PASSWORD', usernameVariable: 'ARTIFACTORY_USERNAME')]) {
+                                sh "make publish"
+                            }
+                            sh "make release"
+                            publishCsmDockerImage(image: env.NAME, push: false, isStable: isStable, tag: "latest")
                         }
                     } else {
                         /*
@@ -96,8 +102,8 @@ pipeline {
                             - Hash                          (e.g. 15.4-dhckj3)
                             - Hash-Timestamp                (e.g. 15.4-dhckj3-20221017133121)
                         */
-                        publishCsmDockerImage(image: env.NAME, multiArch: env.MULTI_ARCH, isStable: isStable, tag: "${env.SLE_VERSION}-${env.VERSION}")
-                        publishCsmDockerImage(image: env.NAME, multiArch: env.MULTI_ARCH, isStable: isStable, tag: "${env.SLE_VERSION}-${env.VERSION}-${env.TIMESTAMP}")
+                        publishCsmDockerImage(image: env.NAME, push: false, isStable: isStable, tag: "${env.SLE_VERSION}-${env.VERSION}")
+                        publishCsmDockerImage(image: env.NAME, push: false, isStable: isStable, tag: "${env.SLE_VERSION}-${env.VERSION}-${env.TIMESTAMP}")
                     }
                 }
             }
